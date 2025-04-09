@@ -266,61 +266,79 @@ function get_all_students($conn, $search = '')
   return $students;
 }
 
-function saveOrUpdateFee($conn, $data) {
-    // Extract and sanitize data
-    $feeId         = $data['feeId'];
-    $instituteName = $data['instituteName'];
-    $studentName   = $data['studentName'];
-    $amount        = $data['amount'];
-    $paymentDate   = $data['paymentDate'];
-    $paymentMethod = $data['paymentMethod'];
-    $status        = $data['status'];
-    $remark        = $data['remark'];
-    $createdAt     = $data['createdAt'];
+function saveOrUpdateFee(
+  $conn,
+  $fee_id,
+  $instituteName,
+  $studentName,
+  $amount,
+  $paymentDate,
+  $paymentMethod,
+  $status,
+  $remark,
+  $createdAt
+) {
 
-    // Check if fee already exists
-    $checkSql = "SELECT fee_id FROM student_fees WHERE fee_id = ?";
-    $stmt = $conn->prepare($checkSql);
-    $stmt->bind_param("s", $feeId);
-    $stmt->execute();
-    $result = $stmt->get_result();
+  // Check if fee already exists
+  $checkSql = "SELECT fee_id FROM student_fees WHERE fee_id = ?";
+  $stmt = $conn->prepare($checkSql);
+  $stmt->bind_param("s", $fee_id);
+  $stmt->execute();
+  $result = $stmt->get_result();
 
-    if ($result->num_rows > 0) {
-        // Update existing record
-        $updateSql = "UPDATE student_fees SET 
+  if ($result->num_rows > 0) {
+    // Update existing record
+    $updateSql = "UPDATE student_fees SET 
             institute_name=?, student_name=?, amount=?, 
             payment_date=?, payment_method=?, status=?, 
             remark=?, created_at=? WHERE fee_id=?";
-        
-        $stmt = $conn->prepare($updateSql);
-        $stmt->bind_param("ssdssssss", $instituteName, $studentName, $amount,
-                          $paymentDate, $paymentMethod, $status,
-                          $remark, $createdAt, $feeId);
 
-        if ($stmt->execute()) {
-            return "Fee updated successfully.";
-        } else {
-            return "Error updating fee: " . $stmt->error;
-        }
+    $stmt = $conn->prepare($updateSql);
+    $stmt->bind_param(
+      "ssdssssss",
+      $instituteName,
+      $studentName,
+      $amount,
+      $paymentDate,
+      $paymentMethod,
+      $status,
+      $remark,
+      $createdAt,
+      $feeId
+    );
 
+    if ($stmt->execute()) {
+      return "Fee updated successfully.";
     } else {
-        // Insert new record
-        $insertSql = "INSERT INTO student_fees 
+      return "Error updating fee: " . $stmt->error;
+    }
+  } else {
+    // Insert new record
+    $insertSql = "INSERT INTO student_fees 
             (fee_id, institute_name, student_name, amount, 
              payment_date, payment_method, status, remark, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-        $stmt = $conn->prepare($insertSql);
-        $stmt->bind_param("sssdsdsss", $feeId, $instituteName, $studentName, $amount,
-                          $paymentDate, $paymentMethod, $status,
-                          $remark, $createdAt);
+    $stmt = $conn->prepare($insertSql);
+    $stmt->bind_param(
+      "sssdsdsss",
+      $feeId,
+      $instituteName,
+      $studentName,
+      $amount,
+      $paymentDate,
+      $paymentMethod,
+      $status,
+      $remark,
+      $createdAt
+    );
 
-        if ($stmt->execute()) {
-            return "Fee added successfully.";
-        } else {
-            return "Error adding fee: " . $stmt->error;
-        }
+    if ($stmt->execute()) {
+      return "Fee added successfully.";
+    } else {
+      return "Error adding fee: " . $stmt->error;
     }
+  }
 }
 
 
@@ -838,7 +856,51 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
       break;
 
+    case 'fees_form':
+      // Sanitize and validate inputs
+      $fee_id = isset($_POST['fee_id']) ? $_POST['fee_id'] : null;
+      $institute_name = isset($_POST['instituteName']) ? $_POST['instituteName'] : null;
+      $student_name = isset($_POST['studentName']) ? $_POST['studentName'] : null;
+      $payment_date = isset($_POST['paymentDate']) ? $_POST['paymentDate'] : null;
+      $payment_method = isset($_POST['paymentMethod']) ? $_POST['paymentMethod'] : null;
+      $created_at = isset($_POST['createdAt']) ? $_POST['createdAt'] : null;
+      $amount = isset($_POST['amount']) ? $_POST['amount'] : null;
+      $status = isset($_POST['status']) ? $_POST['status'] : null;
+      $remark = isset($_POST['remark']) ? $_POST['remark'] : null;
 
+      // Now you can safely use these variables
+
+
+      // Validate required fields
+      if (empty($institute_name) || empty($student_name) || empty($amount) || empty($payment_date) || empty($payment_method)) {
+        $errors[] = 'All fields are required.';
+      }
+
+      // If no errors, insert into database
+      if (empty($errors)) {
+        try {
+          if (saveOrUpdateFee(
+            $conn,
+            $fee_id,
+            $institute_name,
+            $student_name,
+            $amount,
+            $payment_date,
+            $payment_method,
+            $status,
+            $remark,
+            $created_at
+          )) {
+            $success = true;
+          } else {
+            $errors[] = 'Failed to save data: ' . $conn->error;
+          }
+        } catch (Exception $e) {
+          $errors[] = 'Database error: ' . $e->getMessage();
+        }
+      }
+
+      break;
 
     case 'remove_user':
       $email = $_POST['email'];
@@ -873,6 +935,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $feedback = 'Error Adding user.';
       }
       break;
+
     case 'edit_user':
       // Retrieve form data
       $id = $_POST['id'];
@@ -1899,7 +1962,8 @@ if ($selectedRole) {
               <div class="card-body">
                 <h5 class="card-title">Fees Management</h5>
                 <p class="card-text">Manage fees for students.</p>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#feesModal">Add Fees</button>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#feesModal"><i class="bi bi-person-plus"> Add Fees</button>
+
               </div>
 
 
@@ -1998,41 +2062,44 @@ if ($selectedRole) {
             </div>
           </section>
 
-      <div class="modal fade" id="addfeesModal" tabindex="-1" aria-labelledby="addfeesModalLabel" aria-hidden="true">
-          <div class="modal-dialog">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h5 class="modal-title" id="addfeesModalLabel">Add student Fees</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-              </div>
-              <div class="modal-body">
-
-                  <form id="feeForm">
-                    <input type="hidden" id="feeId" value=""> <!-- Hidden for edit -->
+          <div class="modal fade" id="feesModal" tabindex="-1" aria-labelledby="feesModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="feesModalLabel">Add student Fees</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                  <form id="feeForm" method="POST">
+                    <input type="hidden" name="form_type" value="fees_form">
 
                     <div class="row g-3 mb-3">
                       <div class="col-md-4">
+                        <label for="feeId" class="form-label">Fee ID</label>
+                        <input type="text" class="form-control" id="feeId" name="fee_id" required>
+                      </div>
+                      <div class="col-md-4">
                         <label for="instituteName" class="form-label">Institute Name</label>
-                        <input type="text" class="form-control" id="instituteName" required>
+                        <input type="text" class="form-control" id="instituteName" name="instituteName" required>
                       </div>
                       <div class="col-md-4">
                         <label for="studentName" class="form-label">Student Name</label>
-                        <input type="text" class="form-control" id="studentName" required>
+                        <input type="text" class="form-control" id="studentName" name="studentName" required>
                       </div>
                       <div class="col-md-4">
                         <label for="amount" class="form-label">Amount</label>
-                        <input type="number" class="form-control" id="amount" required>
+                        <input type="number" class="form-control" id="amount" name="amount" required>
                       </div>
                     </div>
 
                     <div class="row g-3 mb-3">
                       <div class="col-md-4">
                         <label for="paymentDate" class="form-label">Payment Date</label>
-                        <input type="date" class="form-control" id="paymentDate" required>
+                        <input type="date" class="form-control" id="paymentDate" name="paymentDate" required>
                       </div>
                       <div class="col-md-4">
                         <label for="paymentMethod" class="form-label">Payment Method</label>
-                        <select class="form-select" id="paymentMethod">
+                        <select class="form-select" id="paymentMethod" name="paymentMethod">
                           <option value="Cash">Cash</option>
                           <option value="Card">Card</option>
                           <option value="Online">Online</option>
@@ -2040,7 +2107,7 @@ if ($selectedRole) {
                       </div>
                       <div class="col-md-4">
                         <label for="status" class="form-label">Status</label>
-                        <select class="form-select" id="status">
+                        <select class="form-select" id="status" name="status">
                           <option value="Paid">Paid</option>
                           <option value="Pending">Pending</option>
                         </select>
@@ -2049,22 +2116,18 @@ if ($selectedRole) {
 
                     <div class="mb-3">
                       <label for="remark" class="form-label">Remark</label>
-                      <textarea class="form-control" id="remark" rows="2"></textarea>
+                      <textarea class="form-control" id="remark" name="remark" rows="2"></textarea>
                     </div>
 
                     <div class="mb-3">
                       <label for="createdAt" class="form-label">Created At</label>
-                      <input type="datetime-local" class="form-control" id="createdAt" required>
+                      <input type="datetime-local" class="form-control" id="createdAt" name="createdAt" required>
                     </div>
 
                     <button type="submit" class="btn btn-primary">Save</button>
                     <button type="reset" class="btn btn-secondary ms-2">Clear</button>
                   </form>
                 </div>
-              </div>
-            </div>
-          </div>
-        
 
 
 
@@ -2075,627 +2138,704 @@ if ($selectedRole) {
 
 
 
-          <!-- User Management Section -->
-          <section id="user-management" class="section mt-5 " style="display: none;">
-            <h2>User Management</h2>
-            <div class="card">
-              <div class="card-body">
-                <!-- Create User Buttons -->
-                <button class="btn btn-primary create-user-btn" data-role="office">Create Office Incharge</button>
-                <button class="btn btn-primary create-user-btn" data-role="staff">Create Staff</button>
-                <button class="btn btn-primary create-user-btn" data-role="student">Create Student</button>
-
-                <!-- Role Filter -->
-                <div class="mb-3">
-                  <label for="roleFilter" class="form-label">Filter by Role</label>
-                  <select id="roleFilter" class="form-select" onchange="window.location.href = '?role=' + this.value;">
-                    <option value="">All Roles</option>
-                    <option value="office" <?= $selectedRole === 'office' ? 'selected' : '' ?>>Office Incharge</option>
-                    <option value="staff" <?= $selectedRole === 'staff' ? 'selected' : '' ?>>Staff</option>
-                    <option value="student" <?= $selectedRole === 'student' ? 'selected' : '' ?>>Student</option>
-                  </select>
-                </div>
-
-                <!-- User Feedback -->
-                <div id="userFeedback" class="mt-3"></div>
-
-                <!-- User Table -->
-                <table class="table mt-4">
-                  <thead>
-                    <tr>
-                      <th>Institute</th>
-                      <th>Role</th>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Contact</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach ($users as $user): ?>
-                      <?php if (!$selectedRole || $user['role'] === $selectedRole): ?>
-                        <tr id="user-<?= htmlspecialchars($user['email']) ?>">
-                          <td><?= htmlspecialchars($user['institute_name']) ?></td>
-                          <td><?= ucfirst($user['role']) ?></td>
-                          <td><?= htmlspecialchars($user['name']) ?></td>
-                          <td><?= htmlspecialchars($user['email']) ?></td>
-                          <td><?= htmlspecialchars($user['phone']) ?></td>
-                          <td>
-
-                            <button class="btn btn-secondary btn-sm edit-user-btn" data-bs-toggle="modal" data-bs-target="#editUserModal"
-                              data-id="<?= $user['id'] ?>"
-                              data-institute-name="<?= $user['institute_name'] ?>"
-                              data-name="<?= $user['name'] ?>"
-                              data-email="<?= $user['email'] ?>"
-                              data-phone="<?= $user['phone'] ?>"
-                              data-role="<?= $user['role'] ?>">
-                              Edit
-                            </button>
-                            <form method="POST" style="display:inline;">
-                              <input type="hidden" name="form_type" value="remove_user">
-                              <input type="hidden" name="email" value="<?= htmlspecialchars($user['email']) ?>">
-                              <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
-                              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this user?')">Remove</button>
-                            </form>
-                          </td>
-                        </tr>
-                      <?php endif; ?>
-                    <?php endforeach; ?>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
 
 
-          <!-- Edit User Modal -->
-          <div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                  <form id="editUserForm" action="" method="POST">
-                    <input type="hidden" name="form_type" value="edit_user">
-                    <input type="hidden" name="id" id="editUserId">
-                    <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
 
-                    <div class="mb-3">
-                      <label for="editUserInstitute" class="form-label">Institute Name</label>
-                      <input type="text" class="form-control" id="editUserInstitute" name="institute_name" required>
+                  <!-- User Management Section -->
+                  <section id="user-management" class="section mt-5 " style="display: none;">
+                    <h2>User Management</h2>
+                    <div class="card">
+                      <div class="card-body">
+                        <!-- Create User Buttons -->
+                        <button class="btn btn-primary create-user-btn" data-role="office">Create Office Incharge</button>
+                        <button class="btn btn-primary create-user-btn" data-role="staff">Create Staff</button>
+                        <button class="btn btn-primary create-user-btn" data-role="student">Create Student</button>
+
+                        <!-- Role Filter -->
+                        <div class="mb-3">
+                          <label for="roleFilter" class="form-label">Filter by Role</label>
+                          <select id="roleFilter" class="form-select" onchange="window.location.href = '?role=' + this.value;">
+                            <option value="">All Roles</option>
+                            <option value="office" <?= $selectedRole === 'office' ? 'selected' : '' ?>>Office Incharge</option>
+                            <option value="staff" <?= $selectedRole === 'staff' ? 'selected' : '' ?>>Staff</option>
+                            <option value="student" <?= $selectedRole === 'student' ? 'selected' : '' ?>>Student</option>
+                          </select>
+                        </div>
+
+                        <!-- User Feedback -->
+                        <div id="userFeedback" class="mt-3"></div>
+
+                        <!-- User Table -->
+                        <table class="table mt-4">
+                          <thead>
+                            <tr>
+                              <th>Institute</th>
+                              <th>Role</th>
+                              <th>Name</th>
+                              <th>Email</th>
+                              <th>Contact</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <?php foreach ($users as $user): ?>
+                              <?php if (!$selectedRole || $user['role'] === $selectedRole): ?>
+                                <tr id="user-<?= htmlspecialchars($user['email']) ?>">
+                                  <td><?= htmlspecialchars($user['institute_name']) ?></td>
+                                  <td><?= ucfirst($user['role']) ?></td>
+                                  <td><?= htmlspecialchars($user['name']) ?></td>
+                                  <td><?= htmlspecialchars($user['email']) ?></td>
+                                  <td><?= htmlspecialchars($user['phone']) ?></td>
+                                  <td>
+
+                                    <button class="btn btn-secondary btn-sm edit-user-btn" data-bs-toggle="modal" data-bs-target="#editUserModal"
+                                      data-id="<?= $user['id'] ?>"
+                                      data-institute-name="<?= $user['institute_name'] ?>"
+                                      data-name="<?= $user['name'] ?>"
+                                      data-email="<?= $user['email'] ?>"
+                                      data-phone="<?= $user['phone'] ?>"
+                                      data-role="<?= $user['role'] ?>">
+                                      Edit
+                                    </button>
+                                    <form method="POST" style="display:inline;">
+                                      <input type="hidden" name="form_type" value="remove_user">
+                                      <input type="hidden" name="email" value="<?= htmlspecialchars($user['email']) ?>">
+                                      <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
+                                      <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this user?')">Remove</button>
+                                    </form>
+                                  </td>
+                                </tr>
+                              <?php endif; ?>
+                            <?php endforeach; ?>
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                    <div class="mb-3">
-                      <label for="editUserName" class="form-label">Name</label>
-                      <input type="text" class="form-control" id="editUserName" name="name" required>
+                  </section>
+
+
+                  <!-- Edit User Modal -->
+                  <div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                      <div class="modal-content">
+                        <div class="modal-header">
+                          <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                          <form id="editUserForm" action="" method="POST">
+                            <input type="hidden" name="form_type" value="edit_user">
+                            <input type="hidden" name="id" id="editUserId">
+                            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
+
+                            <div class="mb-3">
+                              <label for="editUserInstitute" class="form-label">Institute Name</label>
+                              <input type="text" class="form-control" id="editUserInstitute" name="institute_name" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="editUserName" class="form-label">Name</label>
+                              <input type="text" class="form-control" id="editUserName" name="name" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="editUserEmail" class="form-label">Email</label>
+                              <input type="email" class="form-control" id="editUserEmail" name="email" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="editUserPhone" class="form-label">Phone</label>
+                              <input type="tel" class="form-control" id="editUserPhone" name="phone" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="editUserRole" class="form-label">Role</label>
+                              <input type="text" class="form-control" id="editUserRole" name="role" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update User</button>
+                          </form>
+                        </div>
+                      </div>
                     </div>
-                    <div class="mb-3">
-                      <label for="editUserEmail" class="form-label">Email</label>
-                      <input type="email" class="form-control" id="editUserEmail" name="email" required>
+                  </div>
+                  <!-- Display success/error message -->
+                  <?php if (!empty($result)) : ?>
+                    <div class="alert <?= strpos($result, 'Error') === false ? 'alert-success' : 'alert-danger' ?>">
+                      <?= $result ?>
                     </div>
-                    <div class="mb-3">
-                      <label for="editUserPhone" class="form-label">Phone</label>
-                      <input type="tel" class="form-control" id="editUserPhone" name="phone" required>
+                  <?php endif; ?>
+
+                  <!-- Create User Modal (Single Modal for All User Types) -->
+                  <div class="modal fade" id="createUserModal" tabindex="-1" aria-labelledby="createUserModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                      <div class="modal-content">
+                        <div class="modal-header">
+                          <h5 class="modal-title" id="createUserModalLabel">Create User</h5>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                          <form id="createUserForm" action="" method="POST">
+                            <input type="hidden" name="form_type" value="create_user">
+                            <input type="hidden" name="role" id="createUserRole">
+                            <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
+
+                            <div class="mb-3">
+                              <label for="createUserInstitute" class="form-label">Institute Name</label>
+                              <input type="text" class="form-control" id="createUserInstitute" name="institute_name" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="createUserName" class="form-label">Name</label>
+                              <input type="text" class="form-control" id="createUserName" name="name" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="createUserEmail" class="form-label">Email</label>
+                              <input type="email" class="form-control" id="createUserEmail" name="email" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="createUserPhone" class="form-label">Phone</label>
+                              <input type="tel" class="form-control" id="createUserPhone" name="phone" required>
+                            </div>
+                            <div class="mb-3">
+                              <label for="createUserPassword" class="form-label">Password</label>
+                              <input type="password" class="form-control" id="createUserPassword" name="password" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Create User</button>
+                          </form>
+                        </div>
+                      </div>
                     </div>
-                    <div class="mb-3">
-                      <label for="editUserRole" class="form-label">Role</label>
-                      <input type="text" class="form-control" id="editUserRole" name="role" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Update User</button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- Display success/error message -->
-          <?php if (!empty($result)) : ?>
-            <div class="alert <?= strpos($result, 'Error') === false ? 'alert-success' : 'alert-danger' ?>">
-              <?= $result ?>
-            </div>
-          <?php endif; ?>
+                  </div>
 
-          <!-- Create User Modal (Single Modal for All User Types) -->
-          <div class="modal fade" id="createUserModal" tabindex="-1" aria-labelledby="createUserModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title" id="createUserModalLabel">Create User</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                  <form id="createUserForm" action="" method="POST">
-                    <input type="hidden" name="form_type" value="create_user">
-                    <input type="hidden" name="role" id="createUserRole">
-                    <input type="hidden" name="csrf_token" value="<?= $csrf_token ?>">
+                  <!-- Bootstrap JS -->
+                  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
-                    <div class="mb-3">
-                      <label for="createUserInstitute" class="form-label">Institute Name</label>
-                      <input type="text" class="form-control" id="createUserInstitute" name="institute_name" required>
-                    </div>
-                    <div class="mb-3">
-                      <label for="createUserName" class="form-label">Name</label>
-                      <input type="text" class="form-control" id="createUserName" name="name" required>
-                    </div>
-                    <div class="mb-3">
-                      <label for="createUserEmail" class="form-label">Email</label>
-                      <input type="email" class="form-control" id="createUserEmail" name="email" required>
-                    </div>
-                    <div class="mb-3">
-                      <label for="createUserPhone" class="form-label">Phone</label>
-                      <input type="tel" class="form-control" id="createUserPhone" name="phone" required>
-                    </div>
-                    <div class="mb-3">
-                      <label for="createUserPassword" class="form-label">Password</label>
-                      <input type="password" class="form-control" id="createUserPassword" name="password" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Create User</button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Bootstrap JS -->
-          <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-
-          <script>
-            function showSection(sectionId) {
+                  <script>
+                    function showSection(sectionId) {
 
 
-              // Show the selected section
-              const sectionToShow = document.getElementById(sectionId);
-              if (sectionToShow) {
-                sectionToShow.style.display = 'block';
-              }
-            }
+                      // Show the selected section
+                      const sectionToShow = document.getElementById(sectionId);
+                      if (sectionToShow) {
+                        sectionToShow.style.display = 'block';
+                      }
+                    }
 
 
 
-            document.addEventListener('DOMContentLoaded', function() {
-              // Get all edit buttons
-              const editButtons = document.querySelectorAll('.edit-btn');
-              // Add click event listener to each edit button
-              editButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                  // Get data from the button's data-* attributes
-                  const branchId = button.getAttribute('data-id');
-                  const instituteName = button.getAttribute('data-name');
-                  const instituteAddress = button.getAttribute('data-address');
-                  const instituteContact = button.getAttribute('data-contact');
-                  const officeIncharge = button.getAttribute('data-incharge');
-                  const officeInchargeContact = button.getAttribute('data-incharge-contact');
+                    document.addEventListener('DOMContentLoaded', function() {
+                      // Get all edit buttons
+                      const editButtons = document.querySelectorAll('.edit-btn');
+                      // Add click event listener to each edit button
+                      editButtons.forEach(button => {
+                        button.addEventListener('click', () => {
+                          // Get data from the button's data-* attributes
+                          const branchId = button.getAttribute('data-id');
+                          const instituteName = button.getAttribute('data-name');
+                          const instituteAddress = button.getAttribute('data-address');
+                          const instituteContact = button.getAttribute('data-contact');
+                          const officeIncharge = button.getAttribute('data-incharge');
+                          const officeInchargeContact = button.getAttribute('data-incharge-contact');
 
-                  // Populate the modal fields
-                  document.getElementById('editBranchId').value = branchId;
-                  document.getElementById('editInstituteName').value = instituteName;
-                  document.getElementById('editInstituteAddress').value = instituteAddress;
-                  document.getElementById('editInstituteContact').value = instituteContact;
-                  document.getElementById('editOfficeIncharge').value = officeIncharge;
-                  document.getElementById('editOfficeInchargeContact').value = officeInchargeContact;
-                });
-              });
-            });
+                          // Populate the modal fields
+                          document.getElementById('editBranchId').value = branchId;
+                          document.getElementById('editInstituteName').value = instituteName;
+                          document.getElementById('editInstituteAddress').value = instituteAddress;
+                          document.getElementById('editInstituteContact').value = instituteContact;
+                          document.getElementById('editOfficeIncharge').value = officeIncharge;
+                          document.getElementById('editOfficeInchargeContact').value = officeInchargeContact;
+                        });
+                      });
+                    });
 
-            document.addEventListener('DOMContentLoaded', function() {
-              const createUserButtons = document.querySelectorAll('.create-user-btn');
-              const createUserModalLabel = document.getElementById('createUserModalLabel');
-              const createUserForm = document.getElementById('createUserForm');
-              const createUserRoleInput = document.getElementById('createUserRole');
+                    document.addEventListener('DOMContentLoaded', function() {
+                      const createUserButtons = document.querySelectorAll('.create-user-btn');
+                      const createUserModalLabel = document.getElementById('createUserModalLabel');
+                      const createUserForm = document.getElementById('createUserForm');
+                      const createUserRoleInput = document.getElementById('createUserRole');
 
-              createUserButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                  const role = this.getAttribute('data-role');
-                  const roleText = this.textContent.trim();
+                      createUserButtons.forEach(button => {
+                        button.addEventListener('click', function() {
+                          const role = this.getAttribute('data-role');
+                          const roleText = this.textContent.trim();
 
-                  // Update modal title
-                  createUserModalLabel.textContent = roleText;
+                          // Update modal title
+                          createUserModalLabel.textContent = roleText;
 
-                  // Update form role input
-                  createUserRoleInput.value = role;
+                          // Update form role input
+                          createUserRoleInput.value = role;
 
-                  // Show the modal
-                  const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
-                  modal.show();
-                });
-              });
-            });
+                          // Show the modal
+                          const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+                          modal.show();
+                        });
+                      });
+                    });
 
-            document.addEventListener('DOMContentLoaded', function() {
-              const createUserButtons = document.querySelectorAll('.create-user-btn');
-              const createUserModalLabel = document.getElementById('createUserModalLabel');
-              const createUserForm = document.getElementById('createUserForm');
-              const createUserRoleInput = document.getElementById('createUserRole');
+                    document.addEventListener('DOMContentLoaded', function() {
+                      const createUserButtons = document.querySelectorAll('.create-user-btn');
+                      const createUserModalLabel = document.getElementById('createUserModalLabel');
+                      const createUserForm = document.getElementById('createUserForm');
+                      const createUserRoleInput = document.getElementById('createUserRole');
 
-              createUserButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                  const role = this.getAttribute('data-role');
-                  const roleText = this.textContent.trim();
+                      createUserButtons.forEach(button => {
+                        button.addEventListener('click', function() {
+                          const role = this.getAttribute('data-role');
+                          const roleText = this.textContent.trim();
 
-                  // Update modal title
-                  createUserModalLabel.textContent = roleText;
+                          // Update modal title
+                          createUserModalLabel.textContent = roleText;
 
-                  // Update form role input
-                  createUserRoleInput.value = role;
+                          // Update form role input
+                          createUserRoleInput.value = role;
 
-                  // Show the modal
-                  const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
-                  modal.show();
-                });
-              });
-            });
-
-
-            // JavaScript to populate the edit modal with user data
-            document.addEventListener('DOMContentLoaded', function() {
-              const editUserModal = document.getElementById('editUserModal');
-              editUserModal.addEventListener('show.bs.modal', function(event) {
-                const button = event.relatedTarget; // Button that triggered the modal
-                const id = button.getAttribute('data-id');
-                const instituteName = button.getAttribute('data-institute-name');
-                const name = button.getAttribute('data-name');
-                const email = button.getAttribute('data-email');
-                const phone = button.getAttribute('data-phone');
-                const role = button.getAttribute('data-role');
-
-                // Populate the form fields
-                document.getElementById('editUserId').value = id;
-                document.getElementById('editUserInstitute').value = instituteName;
-                document.getElementById('editUserName').value = name;
-                document.getElementById('editUserEmail').value = email;
-                document.getElementById('editUserPhone').value = phone;
-                document.getElementById('editUserRole').value = role;
-              });
-            });
-
-            document.getElementById('createOfficeInchargeForm').addEventListener('submit', function(event) {
-              event.preventDefault();
-              const name = document.getElementById('officeInchargeName').value;
-              const email = document.getElementById('officeInchargeEmail').value;
-              const password = document.getElementById('officeInchargePassword').value;
-              const phone = document.getElementById('officeInchargePhone').value;
-              const institute_name = document.getElementById('officeInchargeInstitute').value;
-
-              // Call PHP function to add user (using AJAX in a real implementation)
-              const feedback = document.getElementById('userFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Office Incharge created successfully!</div>';
-              document.getElementById('createOfficeInchargeModal').querySelector('.btn-close').click();
-            });
-
-            document.getElementById('createStaffForm').addEventListener('submit', function(event) {
-              event.preventDefault();
-              const name = document.getElementById('staffName').value;
-              const email = document.getElementById('staffEmail').value;
-              const password = document.getElementById('staffPassword').value;
-              const phone = document.getElementById('staffPhone').value;
-              const institute_name = document.getElementById('staffInstitute').value;
-
-              // Call PHP function to add user (using AJAX in a real implementation)
-              const feedback = document.getElementById('userFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Staff created successfully!</div>';
-              document.getElementById('createStaffModal').querySelector('.btn-close').click();
-            });
-
-            document.getElementById('createStudentForm').addEventListener('submit', function(event) {
-              event.preventDefault();
-              const name = document.getElementById('studentName').value;
-              const email = document.getElementById('studentEmail').value;
-              const password = document.getElementById('studentPassword').value;
-              const phone = document.getElementById('studentPhone').value;
-              const institute_name = document.getElementById('studentInstitute').value;
-
-              // Call PHP function to add user (using AJAX in a real implementation)
-              const feedback = document.getElementById('userFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Student created successfully!</div>';
-              document.getElementById('createStudentModal').querySelector('.btn-close').click();
-            });
-
-            document.addEventListener('DOMContentLoaded', function() {
-              // Get all edit buttons
-              const editButtons = document.querySelectorAll('.edit-user-btn');
-
-              // Add click event listener to each edit button
-              editButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                  // Get data from the button's data-* attributes
-                  const userId = button.getAttribute('data-id');
-                  const userName = button.getAttribute('data-name');
-                  const userEmail = button.getAttribute('data-email');
-
-                  // Populate the modal fields
-                  document.getElementById('editUserId').value = userId;
-                  document.getElementById('editUserName').value = userName;
-                  document.getElementById('editUserEmail').value = userEmail;
-                });
-              });
-            });
-
-            function editUser(id, name, email) {
-              document.getElementById('editUserId').value = id;
-              document.getElementById('editUserName').value = name;
-              document.getElementById('editUserEmail').value = email;
-              const editModal = new bootstrap.Modal(document.getElementById('editUserModal'));
-              editModal.show();
-            }
-
-            document.addEventListener('DOMContentLoaded', function() {
-              const photoInput = document.getElementById('photo');
-              const photoPreview = document.getElementById('photoPreview');
-
-              // Show existing photo if editing (PHP fallback)
-              const defaultPhoto = "<?= !empty($student['photo_path']) ? htmlspecialchars($student['photo_path']) : '' ?>";
-              if (defaultPhoto) {
-                photoPreview.innerHTML = `<img src="${defaultPhoto}" class="img-thumbnail" style="max-width: 200px;">`;
-              }
-
-              // Handle new image selection
-              photoInput.addEventListener('change', function(e) {
-                const file = this.files[0];
-
-                if (file) {
-                  // Validate file type
-                  if (!file.type.match('image/jpeg') && !file.type.match('image/png')) {
-                    alert('Only JPEG and PNG images are allowed!');
-                    this.value = '';
-                    return;
-                  }
-
-                  // Validate file size (e.g., 2MB max)
-                  if (file.size > 2 * 1024 * 1024) {
-                    alert('Image must be less than 2MB!');
-                    this.value = '';
-                    return;
-                  }
-
-                  // Preview the image
-                  const reader = new FileReader();
-                  reader.onload = function(e) {
-                    photoPreview.innerHTML = `<img src="${e.target.result}" class="img-thumbnail" style="max-width: 200px;">`;
-                  };
-                  reader.readAsDataURL(file);
-                } else {
-                  photoPreview.innerHTML = '<span class="text-muted">No photo selected</span>';
-                }
-              });
-            });
+                          // Show the modal
+                          const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+                          modal.show();
+                        });
+                      });
+                    });
 
 
+                    // JavaScript to populate the edit modal with user data
+                    document.addEventListener('DOMContentLoaded', function() {
+                      const editUserModal = document.getElementById('editUserModal');
+                      editUserModal.addEventListener('show.bs.modal', function(event) {
+                        const button = event.relatedTarget; // Button that triggered the modal
+                        const id = button.getAttribute('data-id');
+                        const instituteName = button.getAttribute('data-institute-name');
+                        const name = button.getAttribute('data-name');
+                        const email = button.getAttribute('data-email');
+                        const phone = button.getAttribute('data-phone');
+                        const role = button.getAttribute('data-role');
 
+                        // Populate the form fields
+                        document.getElementById('editUserId').value = id;
+                        document.getElementById('editUserInstitute').value = instituteName;
+                        document.getElementById('editUserName').value = name;
+                        document.getElementById('editUserEmail').value = email;
+                        document.getElementById('editUserPhone').value = phone;
+                        document.getElementById('editUserRole').value = role;
+                      });
+                    });
 
-            // Photo preview functionality
-            // document.getElementById('photo').addEventListener('change', function(e) {
-            //   const file = e.target.files[0];
-            //   if (file) {
-            //     const reader = new FileReader();
-            //     reader.onload = function(event) {
-            //       const preview = document.getElementById('photoPreview');
-            //       preview.innerHTML = '';
-            //       const img = document.createElement('img');
-            //       img.src = event.target.result;
-            //       preview.appendChild(img);
-            //     };
-            //     reader.readAsDataURL(file);
-            //   }
-            // });
+                    document.getElementById('createOfficeInchargeForm').addEventListener('submit', function(event) {
+                      event.preventDefault();
+                      const name = document.getElementById('officeInchargeName').value;
+                      const email = document.getElementById('officeInchargeEmail').value;
+                      const password = document.getElementById('officeInchargePassword').value;
+                      const phone = document.getElementById('officeInchargePhone').value;
+                      const institute_name = document.getElementById('officeInchargeInstitute').value;
 
-            // Form validation
-            document.getElementById('admissionForm').addEventListener('submit', function(e) {
-              let isValid = true;
+                      // Call PHP function to add user (using AJAX in a real implementation)
+                      const feedback = document.getElementById('userFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Office Incharge created successfully!</div>';
+                      document.getElementById('createOfficeInchargeModal').querySelector('.btn-close').click();
+                    });
 
-              // Clear previous errors
-              document.querySelectorAll('.error-message').forEach(el => el.textContent = '');
-              document.querySelectorAll('.form-control').forEach(el => el.classList.remove('is-invalid'));
+                    document.getElementById('createStaffForm').addEventListener('submit', function(event) {
+                      event.preventDefault();
+                      const name = document.getElementById('staffName').value;
+                      const email = document.getElementById('staffEmail').value;
+                      const password = document.getElementById('staffPassword').value;
+                      const phone = document.getElementById('staffPhone').value;
+                      const institute_name = document.getElementById('staffInstitute').value;
 
-              // Validate required fields
-              const requiredFields = document.querySelectorAll('[required]');
-              requiredFields.forEach(field => {
-                if (!field.value.trim()) {
-                  field.classList.add('is-invalid');
-                  document.getElementById(`${field.id}Error`).textContent = 'This field is required';
-                  isValid = false;
-                }
-              });
+                      // Call PHP function to add user (using AJAX in a real implementation)
+                      const feedback = document.getElementById('userFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Staff created successfully!</div>';
+                      document.getElementById('createStaffModal').querySelector('.btn-close').click();
+                    });
 
-              // Validate email format
-              const email = document.getElementById('email');
-              if (email.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value)) {
-                email.classList.add('is-invalid');
-                document.getElementById('emailError').textContent = 'Please enter a valid email address';
-                isValid = false;
-              }
+                    document.getElementById('createStudentForm').addEventListener('submit', function(event) {
+                      event.preventDefault();
+                      const name = document.getElementById('studentName').value;
+                      const email = document.getElementById('studentEmail').value;
+                      const password = document.getElementById('studentPassword').value;
+                      const phone = document.getElementById('studentPhone').value;
+                      const institute_name = document.getElementById('studentInstitute').value;
 
-              // Validate phone number
-              const phone = document.getElementById('phone');
-              if (phone.value && !/^[\d\s\+\-\(\)]{10,15}$/.test(phone.value)) {
-                phone.classList.add('is-invalid');
-                document.getElementById('phoneError').textContent = 'Please enter a valid phone number';
-                isValid = false;
-              }
+                      // Call PHP function to add user (using AJAX in a real implementation)
+                      const feedback = document.getElementById('userFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Student created successfully!</div>';
+                      document.getElementById('createStudentModal').querySelector('.btn-close').click();
+                    });
 
+                    document.addEventListener('DOMContentLoaded', function() {
+                      // Get all edit buttons
+                      const editButtons = document.querySelectorAll('.edit-user-btn');
 
-              // Validate file types for photo
-              const photo = document.getElementById('photo');
-              if (photo.files.length > 0) {
-                const allowedTypes = ['image/jpeg', 'image/png'];
-                if (!allowedTypes.includes(photo.files[0].type)) {
-                  photo.classList.add('is-invalid');
-                  document.getElementById('photoError').textContent = 'Only JPG and PNG images are allowed';
-                  isValid = false;
-                }
-              }
+                      // Add click event listener to each edit button
+                      editButtons.forEach(button => {
+                        button.addEventListener('click', () => {
+                          // Get data from the button's data-* attributes
+                          const userId = button.getAttribute('data-id');
+                          const userName = button.getAttribute('data-name');
+                          const userEmail = button.getAttribute('data-email');
 
-              if (!isValid) {
-                e.preventDefault();
-                // Scroll to first error
-                const firstError = document.querySelector('.is-invalid');
-                if (firstError) {
-                  firstError.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center'
-                  });
-                }
-              }
-            });
+                          // Populate the modal fields
+                          document.getElementById('editUserId').value = userId;
+                          document.getElementById('editUserName').value = userName;
+                          document.getElementById('editUserEmail').value = userEmail;
+                        });
+                      });
+                    });
 
-            function removeUser(id) {
-              if (confirm('Are you sure you want to remove this user?')) {
-                // Call PHP function to remove user (using AJAX in a real implementation)
-                function removeUser(email) {
-                  if (confirm('Are you sure you want to remove this user?')) {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('POST', 'admin.php', true); // Send request to the same file
-                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-                    xhr.onreadystatechange = function() {
-                      if (xhr.readyState === 4 && xhr.status === 200) {
-                        const response = JSON.parse(xhr.responseText);
-                        if (response.success) {
-                          document.getElementById('user-' + email).remove();
-                          const feedback = document.getElementById('userFeedback');
-                          feedback.innerHTML = '<div class="alert alert-danger" role="alert">User removed successfully!</div>';
+                    function editUser(id, name, email) {
+                      document.getElementById('editUserId').value = id;
+                      document.getElementById('editUserName').value = name;
+                      document.getElementById('editUserEmail').value = email;
+                      const editModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+                      editModal.show();
+                    }
+
+                    document.addEventListener('DOMContentLoaded', function() {
+                      const photoInput = document.getElementById('photo');
+                      const photoPreview = document.getElementById('photoPreview');
+
+                      // Show existing photo if editing (PHP fallback)
+                      const defaultPhoto = "<?= !empty($student['photo_path']) ? htmlspecialchars($student['photo_path']) : '' ?>";
+                      if (defaultPhoto) {
+                        photoPreview.innerHTML = `<img src="${defaultPhoto}" class="img-thumbnail" style="max-width: 200px;">`;
+                      }
+
+                      // Handle new image selection
+                      photoInput.addEventListener('change', function(e) {
+                        const file = this.files[0];
+
+                        if (file) {
+                          // Validate file type
+                          if (!file.type.match('image/jpeg') && !file.type.match('image/png')) {
+                            alert('Only JPEG and PNG images are allowed!');
+                            this.value = '';
+                            return;
+                          }
+
+                          // Validate file size (e.g., 2MB max)
+                          if (file.size > 2 * 1024 * 1024) {
+                            alert('Image must be less than 2MB!');
+                            this.value = '';
+                            return;
+                          }
+
+                          // Preview the image
+                          const reader = new FileReader();
+                          reader.onload = function(e) {
+                            photoPreview.innerHTML = `<img src="${e.target.result}" class="img-thumbnail" style="max-width: 200px;">`;
+                          };
+                          reader.readAsDataURL(file);
                         } else {
-                          alert(response.error);
+                          photoPreview.innerHTML = '<span class="text-muted">No photo selected</span>';
+                        }
+                      });
+                    });
+
+
+
+
+                    // Photo preview functionality
+                    // document.getElementById('photo').addEventListener('change', function(e) {
+                    //   const file = e.target.files[0];
+                    //   if (file) {
+                    //     const reader = new FileReader();
+                    //     reader.onload = function(event) {
+                    //       const preview = document.getElementById('photoPreview');
+                    //       preview.innerHTML = '';
+                    //       const img = document.createElement('img');
+                    //       img.src = event.target.result;
+                    //       preview.appendChild(img);
+                    //     };
+                    //     reader.readAsDataURL(file);
+                    //   }
+                    // });
+
+                    // Form validation
+                    document.getElementById('admissionForm').addEventListener('submit', function(e) {
+                      let isValid = true;
+
+                      // Clear previous errors
+                      document.querySelectorAll('.error-message').forEach(el => el.textContent = '');
+                      document.querySelectorAll('.form-control').forEach(el => el.classList.remove('is-invalid'));
+
+                      // Validate required fields
+                      const requiredFields = document.querySelectorAll('[required]');
+                      requiredFields.forEach(field => {
+                        if (!field.value.trim()) {
+                          field.classList.add('is-invalid');
+                          document.getElementById(`${field.id}Error`).textContent = 'This field is required';
+                          isValid = false;
+                        }
+                      });
+
+                      // Validate email format
+                      const email = document.getElementById('email');
+                      if (email.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value)) {
+                        email.classList.add('is-invalid');
+                        document.getElementById('emailError').textContent = 'Please enter a valid email address';
+                        isValid = false;
+                      }
+
+                      // Validate phone number
+                      const phone = document.getElementById('phone');
+                      if (phone.value && !/^[\d\s\+\-\(\)]{10,15}$/.test(phone.value)) {
+                        phone.classList.add('is-invalid');
+                        document.getElementById('phoneError').textContent = 'Please enter a valid phone number';
+                        isValid = false;
+                      }
+
+
+                      // Validate file types for photo
+                      const photo = document.getElementById('photo');
+                      if (photo.files.length > 0) {
+                        const allowedTypes = ['image/jpeg', 'image/png'];
+                        if (!allowedTypes.includes(photo.files[0].type)) {
+                          photo.classList.add('is-invalid');
+                          document.getElementById('photoError').textContent = 'Only JPG and PNG images are allowed';
+                          isValid = false;
                         }
                       }
-                    };
-                    xhr.send('email=' + encodeURIComponent(email));
-                  }
-                }
-                const feedback = document.getElementById('userFeedback');
-                feedback.innerHTML = '<div class="alert alert-danger" role="alert">User removed successfully!</div>';
-                document.getElementById('user-' + id).remove();
-              }
-            }
 
-            function sendReminder(feeId) {
-              // Implement AJAX call to send reminder
-              console.log('Send reminder for fee ID:', feeId);
-            }
+                      if (!isValid) {
+                        e.preventDefault();
+                        // Scroll to first error
+                        const firstError = document.querySelector('.is-invalid');
+                        if (firstError) {
+                          firstError.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center'
+                          });
+                        }
+                      }
+                    });
 
-            function markAsPaid(feeId) {
-              // Implement AJAX call to update fee status to paid
-              console.log('Mark fee ID as paid:', feeId);
-            }
-            // Call this to pre-fill form when editing
-            function loadFeeData(data) {
-              document.getElementById('formTitle').textContent = "Edit Student Fee";
-              document.getElementById('feeId').value = data.feeId;
-              document.getElementById('instituteName').value = data.instituteName;
-              document.getElementById('studentName').value = data.studentName;
-              document.getElementById('amount').value = data.amount;
-              document.getElementById('paymentDate').value = data.paymentDate;
-              document.getElementById('paymentMethod').value = data.paymentMethod;
-              document.getElementById('status').value = data.status;
-              document.getElementById('remark').value = data.remark;
-              document.getElementById('createdAt').value = data.createdAt;
-            }
+                    function removeUser(id) {
+                      if (confirm('Are you sure you want to remove this user?')) {
+                        // Call PHP function to remove user (using AJAX in a real implementation)
+                        function removeUser(email) {
+                          if (confirm('Are you sure you want to remove this user?')) {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('POST', 'admin.php', true); // Send request to the same file
+                            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                            xhr.onreadystatechange = function() {
+                              if (xhr.readyState === 4 && xhr.status === 200) {
+                                const response = JSON.parse(xhr.responseText);
+                                if (response.success) {
+                                  document.getElementById('user-' + email).remove();
+                                  const feedback = document.getElementById('userFeedback');
+                                  feedback.innerHTML = '<div class="alert alert-danger" role="alert">User removed successfully!</div>';
+                                } else {
+                                  alert(response.error);
+                                }
+                              }
+                            };
+                            xhr.send('email=' + encodeURIComponent(email));
+                          }
+                        }
+                        const feedback = document.getElementById('userFeedback');
+                        feedback.innerHTML = '<div class="alert alert-danger" role="alert">User removed successfully!</div>';
+                        document.getElementById('user-' + id).remove();
+                      }
+                    }
+                    // Fees Management Functions
+                    function loadFeeData(feeId) {
+                      // AJAX call to get fee data
+                      fetch(`get_fee.php?id=${feeId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                          document.getElementById('formTitle').textContent = "Edit Student Fee";
+                          document.getElementById('feeId').value = data.fee_id;
+                          document.getElementById('instituteName').value = data.institute_name;
+                          document.getElementById('studentName').value = data.student_name;
+                          document.getElementById('amount').value = data.amount;
+                          document.getElementById('paymentDate').value = data.payment_date;
+                          document.getElementById('paymentMethod').value = data.payment_method;
+                          document.getElementById('status').value = data.status;
+                          document.getElementById('remark').value = data.remark;
+                          document.getElementById('createdAt').value = data.created_at;
 
-            // Simulate loading data for edit
-            loadFeeData(exampleFee);
+                          // Show the modal
+                          const feeModal = new bootstrap.Modal(document.getElementById('feesModal'));
+                          feeModal.show();
+                        })
+                        .catch(error => console.error('Error loading fee data:', error));
+                    }
 
-            // Handle form submit (you can use AJAX or PHP backend here)
-            document.getElementById('feeForm').addEventListener('submit', function(e) {
-              e.preventDefault();
-              const formData = {
-                feeId: document.getElementById('feeId').value,
-                instituteName: document.getElementById('instituteName').value,
-                studentName: document.getElementById('studentName').value,
-                amount: document.getElementById('amount').value,
-                paymentDate: document.getElementById('paymentDate').value,
-                paymentMethod: document.getElementById('paymentMethod').value,
-                status: document.getElementById('status').value,
-                remark: document.getElementById('remark').value,
-                createdAt: document.getElementById('createdAt').value
-              };
+                    // Handle form submission
+                    document.getElementById('feeForm').addEventListener('submit', function(e) {
+                      e.preventDefault();
 
-              console.log("Form Data Submitted:", formData);
+                      const formData = new FormData(this);
+                      formData.append('form_type', 'fees_form');
 
-              // Here, you can send data to PHP using fetch/ajax or form action
-              alert("Form submitted! (Check console)");
-            });
+                      fetch('admin.php', {
+                          method: 'POST',
+                          body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                          if (data.success) {
+                            // Show success message
+                            alert('Fee saved successfully!');
+                            // Refresh the fees table
+                            location.reload();
+                          } else {
+                            alert('Error: ' + data.error);
+                          }
+                        })
+                        .catch(error => console.error('Error:', error));
+                    });
 
-            function generatePerformanceReport() {
-              const feedback = document.getElementById('reportFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Performance report generated successfully!</div>';
-            }
+                    // Function to mark fee as paid
+                    function markAsPaid(feeId) {
+                      if (confirm('Are you sure you want to mark this fee as paid?')) {
+                        fetch('admin.php', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `form_type=update_fee_status&fee_id=${feeId}&status=Paid`
+                          })
+                          .then(response => response.json())
+                          .then(data => {
+                            if (data.success) {
+                              alert('Fee status updated to Paid');
+                              location.reload();
+                            } else {
+                              alert('Error: ' + data.error);
+                            }
+                          })
+                          .catch(error => console.error('Error:', error));
+                      }
+                    }
 
-            function generateFeeCollectionReport() {
-              const feedback = document.getElementById('reportFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Fee collection report generated successfully!</div>';
-            }
+                    // Function to send reminder
+                    function sendReminder(feeId) {
+                      if (confirm('Send payment reminder for this fee?')) {
+                        fetch('send_reminder.php', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `fee_id=${feeId}`
+                          })
+                          .then(response => response.json())
+                          .then(data => {
+                            if (data.success) {
+                              alert('Reminder sent successfully');
+                            } else {
+                              alert('Error: ' + data.error);
+                            }
+                          })
+                          .catch(error => console.error('Error:', error));
+                      }
+                    }
 
-            function generateAdmissionReport() {
-              const feedback = document.getElementById('reportFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Admission report generated successfully!</div>';
-            }
+                    // Initialize the fees modal
+                    document.addEventListener('DOMContentLoaded', function() {
+                      // Set default payment date to today
+                      document.getElementById('paymentDate').valueAsDate = new Date();
 
-            function accessControl() {
-              const feedback = document.getElementById('settingsFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Access control settings updated successfully!</div>';
-            }
+                      // Set default created at to current datetime
+                      const now = new Date();
+                      document.getElementById('createdAt').value = now.toISOString().slice(0, 16);
 
-            function securitySettings() {
-              const feedback = document.getElementById('settingsFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Security settings updated successfully!</div>';
-            }
+                      // Handle edit buttons
+                      document.querySelectorAll('.edit-fee-btn').forEach(button => {
+                        button.addEventListener('click', function() {
+                          const feeId = this.getAttribute('data-fee-id');
+                          loadFeeData(feeId);
+                        });
+                      });
 
-            function softwareConfigurations() {
-              const feedback = document.getElementById('settingsFeedback');
-              feedback.innerHTML = '<div class="alert alert-success" role="alert">Software configurations updated successfully!</div>';
-            }
+                      // New fee button
+                      document.getElementById('newFeeBtn').addEventListener('click', function() {
+                        document.getElementById('formTitle').textContent = "Add New Student Fee";
+                        document.getElementById('feeId').value = '';
+                        document.getElementById('feeForm').reset();
 
-            document.querySelectorAll('.edit-button').forEach(button => {
-              button.addEventListener('click', function() {
-                // Get all data attributes
-                const studentId = this.getAttribute('data-id');
+                        const feeModal = new bootstrap.Modal(document.getElementById('feesModal'));
+                        feeModal.show();
+                      });
+                    });
 
-                // Populate form fields
-                document.getElementById('student_id').value = studentId;
-                document.getElementById('edit_first_name').value = this.getAttribute('data-first-name');
-                document.getElementById('edit_last_name').value = this.getAttribute('data-last-name');
-                document.getElementById('edit_email').value = this.getAttribute('data-email');
-                document.getElementById('edit_phone').value = this.getAttribute('data-phone');
-                document.getElementById('edit_dob').value = this.getAttribute('data-dob');
-                document.getElementById('edit_address').value = this.getAttribute('data-address');
-                document.getElementById('edit_course').value = this.getAttribute('data-course');
-                document.getElementById('edit_school_type').value = this.getAttribute('data-school-type');
-                document.getElementById('edit_school').value = this.getAttribute('data-school');
-                document.getElementById('edit_parent_name').value = this.getAttribute('data-parent-name');
-                document.getElementById('edit_parent_phone').value = this.getAttribute('data-parent-phone');
-                document.getElementById('edit_referred_by').value = this.getAttribute('data-referred-by-about');
-                document.getElementById('edit_admission_accepted_by').value = this.getAttribute('data-admission-accepted-by');
-                document.getElementById('edit_institute_name').value = this.getAttribute('data-institute-name');
-                document.getElementById('edit_admission_code').value = this.getAttribute('data-admission-code');
+                    function generatePerformanceReport() {
+                      const feedback = document.getElementById('reportFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Performance report generated successfully!</div>';
+                    }
 
-                // Handle radio buttons
-                const gender = this.getAttribute('data-gender');
-                if (gender) {
-                  document.querySelector(`input[name="gender"][value="${gender}"]`).checked = true;
-                }
+                    function generateFeeCollectionReport() {
+                      const feedback = document.getElementById('reportFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Fee collection report generated successfully!</div>';
+                    }
 
-                const status = this.getAttribute('data-status');
-                if (status) {
-                  document.querySelector(`input[name="status"][value="${status}"]`).checked = true;
-                }
+                    function generateAdmissionReport() {
+                      const feedback = document.getElementById('reportFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Admission report generated successfully!</div>';
+                    }
 
-                // Handle photo preview
-                const photoPreview = document.getElementById('edit_photo_preview');
-                const photoUrl = this.getAttribute('data-photo');
-                const imgElement = photoPreview.querySelector('img');
-                const noPhotoElement = photoPreview.querySelector('.no-photo');
+                    function accessControl() {
+                      const feedback = document.getElementById('settingsFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Access control settings updated successfully!</div>';
+                    }
 
-                if (photoUrl && photoUrl !== 'Photo Not Available') {
-                  imgElement.src = photoUrl;
-                  imgElement.style.display = 'block';
-                  noPhotoElement.style.display = 'none';
-                } else {
-                  imgElement.style.display = 'none';
-                  noPhotoElement.style.display = 'inline';
-                }
+                    function securitySettings() {
+                      const feedback = document.getElementById('settingsFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Security settings updated successfully!</div>';
+                    }
 
-                // Show modal
-                new bootstrap.Modal(document.getElementById('updateadmissionModal')).show();
-              });
-            });
+                    function softwareConfigurations() {
+                      const feedback = document.getElementById('settingsFeedback');
+                      feedback.innerHTML = '<div class="alert alert-success" role="alert">Software configurations updated successfully!</div>';
+                    }
+
+                    document.querySelectorAll('.edit-button').forEach(button => {
+                      button.addEventListener('click', function() {
+                        // Get all data attributes
+                        const studentId = this.getAttribute('data-id');
+
+                        // Populate form fields
+                        document.getElementById('student_id').value = studentId;
+                        document.getElementById('edit_first_name').value = this.getAttribute('data-first-name');
+                        document.getElementById('edit_last_name').value = this.getAttribute('data-last-name');
+                        document.getElementById('edit_email').value = this.getAttribute('data-email');
+                        document.getElementById('edit_phone').value = this.getAttribute('data-phone');
+                        document.getElementById('edit_dob').value = this.getAttribute('data-dob');
+                        document.getElementById('edit_address').value = this.getAttribute('data-address');
+                        document.getElementById('edit_course').value = this.getAttribute('data-course');
+                        document.getElementById('edit_school_type').value = this.getAttribute('data-school-type');
+                        document.getElementById('edit_school').value = this.getAttribute('data-school');
+                        document.getElementById('edit_parent_name').value = this.getAttribute('data-parent-name');
+                        document.getElementById('edit_parent_phone').value = this.getAttribute('data-parent-phone');
+                        document.getElementById('edit_referred_by').value = this.getAttribute('data-referred-by-about');
+                        document.getElementById('edit_admission_accepted_by').value = this.getAttribute('data-admission-accepted-by');
+                        document.getElementById('edit_institute_name').value = this.getAttribute('data-institute-name');
+                        document.getElementById('edit_admission_code').value = this.getAttribute('data-admission-code');
+
+                        // Handle radio buttons
+                        const gender = this.getAttribute('data-gender');
+                        if (gender) {
+                          document.querySelector(`input[name="gender"][value="${gender}"]`).checked = true;
+                        }
+
+                        const status = this.getAttribute('data-status');
+                        if (status) {
+                          document.querySelector(`input[name="status"][value="${status}"]`).checked = true;
+                        }
+
+                        // Handle photo preview
+                        const photoPreview = document.getElementById('edit_photo_preview');
+                        const photoUrl = this.getAttribute('data-photo');
+                        const imgElement = photoPreview.querySelector('img');
+                        const noPhotoElement = photoPreview.querySelector('.no-photo');
+
+                        if (photoUrl && photoUrl !== 'Photo Not Available') {
+                          imgElement.src = photoUrl;
+                          imgElement.style.display = 'block';
+                          noPhotoElement.style.display = 'none';
+                        } else {
+                          imgElement.style.display = 'none';
+                          noPhotoElement.style.display = 'inline';
+                        }
+
+                        // Show modal
+                        new bootstrap.Modal(document.getElementById('updateadmissionModal')).show();
+                      });
+                    });
 
 
 
@@ -2703,17 +2843,17 @@ if ($selectedRole) {
 
 
 
-            // Initially show the overview section
-            showSection('overview');
+                    // Initially show the overview section
+                    showSection('overview');
 
 
-            // Add event listeners to forms
-            document.getElementById('addInstituteForm').addEventListener('submit', addInstitute);
-            document.getElementById('editInstituteForm').addEventListener('submit', editInstitute);
-            document.getElementById('createOfficeInchargeForm').addEventListener('submit', createOfficeIncharge);
-            document.getElementById('createStaffForm').addEventListener('submit', createStaff);
-            document.getElementById('createStudentForm').addEventListener('submit', createStudent);
-          </script>
+                    // Add event listeners to forms
+                    document.getElementById('addInstituteForm').addEventListener('submit', addInstitute);
+                    document.getElementById('editInstituteForm').addEventListener('submit', editInstitute);
+                    document.getElementById('createOfficeInchargeForm').addEventListener('submit', createOfficeIncharge);
+                    document.getElementById('createStaffForm').addEventListener('submit', createStaff);
+                    document.getElementById('createStudentForm').addEventListener('submit', createStudent);
+                  </script>
 </body>
 
 </html>
