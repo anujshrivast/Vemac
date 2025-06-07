@@ -304,7 +304,7 @@ function saveOrUpdateFee(
       $status,
       $remark,
       $createdAt,
-      $feeId
+      $fee_id
     );
 
     if ($stmt->execute()) {
@@ -322,7 +322,7 @@ function saveOrUpdateFee(
     $stmt = $conn->prepare($insertSql);
     $stmt->bind_param(
       "sssdsdsss",
-      $feeId,
+      $fee_id,
       $instituteName,
       $studentName,
       $amount,
