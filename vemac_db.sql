@@ -158,21 +158,34 @@ CREATE TABLE `studentattendance` (
 -- Table structure for table `students`
 --
 
+CREATE TABLE `institute_branches` (
+  `branch_id` int(11) NOT NULL AUTO_INCREMENT,
+  `institute_name` varchar(100) NOT NULL,
+  `location` varchar(100) NOT NULL,
+  `status` enum('Active','Inactive') NOT NULL DEFAULT 'Active',
+  PRIMARY KEY (`branch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE `students` (
-  `student_id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL AUTO_INCREMENT,
+  `admission_code` varchar(20) NOT NULL,
+  `institute_branch_id` int(11) NOT NULL,
   `name` varchar(100) NOT NULL,
   `dob` date NOT NULL,
   `gender` enum('Male','Female','Other') NOT NULL,
-  `phone` varchar(15) DEFAULT NULL,
+  `student_phone` varchar(15) DEFAULT NULL,
+  `parent_phone` varchar(15) DEFAULT NULL,
   `email` varchar(100) DEFAULT NULL,
-  `password` varchar(255) NOT NULL,
   `address` text DEFAULT NULL,
+  `photo` varchar(255) DEFAULT NULL,
   `admission_date` date NOT NULL,
   `subjects` varchar(100) NOT NULL,
-  `batch_code` varchar(50) NOT NULL,
-  `batch_id` int(11) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `status` enum('Active','Inactive','Suspended','Graduated') NOT NULL DEFAULT 'Active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`student_id`),
+  UNIQUE KEY `admission_code` (`admission_code`),
+  FOREIGN KEY (`institute_branch_id`) REFERENCES `institute_branches` (`branch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
 
